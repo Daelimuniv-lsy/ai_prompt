@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 관리자 Google 계정 확인
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'irol00030@gmail.com';
+    }
+
+    // 프롬프트 데이터 형식 및 글자 수 검증 (제목 100자 이내, 내용 10,000자 이내)
+    function isValidPrompt(data) {
+      return data.keys().hasAll(['title', 'category', 'content', 'createdAt'])
+        && data.keys().hasOnly(['title', 'category', 'content', 'createdAt'])
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 100
+        && data.category is string
+        && data.category.size() >= 1
+        && data.category.size() <= 50
+        && data.content is string
+        && data.content.size() >= 1
+        && data.content.size() <= 10000
+        && (data.createdAt is int || data.createdAt is timestamp);
+    }
+
+    // prompts 컬렉션: 누구나 읽기 가능, 쓰기는 관리자만 가능
+    match /prompts/{promptId} {
+      allow read: if true;
+      allow create: if isAdmin() && isValidPrompt(request.resource.data);
+      allow update: if isAdmin()
+        && isValidPrompt(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
+    }
+
+    // 그 밖의 모든 컬렉션은 읽기·쓰기 모두 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
